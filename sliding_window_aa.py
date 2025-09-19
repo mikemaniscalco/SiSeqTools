@@ -117,7 +117,7 @@ def main():
     parser.add_argument("-i", "--input", required=True, help="Input FASTA file")
     parser.add_argument("-o", "--output", required=True, help="Output TSV file")
     parser.add_argument("-w", "--window", type=str, required=True, help="Window size as N or MIN-MAX (e.g. 200-400)")
-    parser.add_argument("--step", type=int, default=5, help="Step size (default=5)")
+    parser.add_argument("-s", "--step", type=int, default=5, help="Step size (default=5)")
     parser.add_argument("-t", "--threads", type=int, default=1, help="Number of threads")
     args = parser.parse_args()
 
