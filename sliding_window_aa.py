@@ -56,20 +56,65 @@ def compute_window(seq, start, window):
 def process_record(args):
     """
     Slide windows over a sequence for all window sizes in [min_w, max_w].
-    Return list of windows that pass thresholds (≥10% K or ≥18% S).
+    Return only consolidated windows:
+      - If overlapping windows have identical length, %K, and %S → keep only the first.
+      - If multiple overlapping windows differ → keep the one with highest %K+%S.
     """
     record, min_w, max_w, step = args
     seq = str(record.seq).upper()
     rec_id = record.id
-    results = []
+    raw_results = []
 
+    # collect all passing windows first
     for window in range(min_w, max_w + 1, step if min_w != max_w else 1):
         for start in range(0, len(seq) - window + 1, step):
-            pct_k, pct_s = compute_window(seq, start, window)
+            subseq = seq[start:start + window]
+            length = len(subseq)
+            if length == 0:
+                continue
+            pct_k = subseq.count(AA_1) / length * 100
+            pct_s = subseq.count(AA_2) / length * 100
             if pct_k >= THRESH_K or pct_s >= THRESH_S:
-                results.append((rec_id, window, start, start + window,
-                                pct_k, pct_s))
-    return results
+                raw_results.append((window, start, start + window, pct_k, pct_s))
+
+    if not raw_results:
+        return []
+
+    # sort by start so overlapping regions are adjacent
+    raw_results.sort(key=lambda x: (x[1], x[2]))
+
+    consolidated = []
+    prev = None
+
+    for window, start, end, pct_k, pct_s in raw_results:
+        if prev is None:
+            prev = (window, start, end, pct_k, pct_s)
+            continue
+
+        pw, ps, pe, pk, ps_aa = prev
+
+        # check if current overlaps with previous
+        if start < pe:
+            # identical percentages & length → keep only the first (prev)
+            if window == pw and abs(pk - pct_k) < 1e-9 and abs(ps_aa - pct_s) < 1e-9:
+                continue
+            else:
+                # choose the "better" window by higher sum %K+%S
+                if (pct_k + pct_s) > (pk + ps_aa):
+                    prev = (window, start, end, pct_k, pct_s)
+                # else keep prev
+        else:
+            # no overlap, flush prev
+            consolidated.append(prev)
+            prev = (window, start, end, pct_k, pct_s)
+
+    # don’t forget to append the last one
+    if prev is not None:
+        consolidated.append(prev)
+
+    # attach record id to results
+    return [(rec_id, w, s, e, pk, ps) for (w, s, e, pk, ps) in consolidated]
+
 
 
 def filter_windows(windows):
@@ -116,7 +161,7 @@ def main():
     parser = argparse.ArgumentParser(description="Sliding window amino acid analysis.")
     parser.add_argument("-i", "--input", required=True, help="Input FASTA file")
     parser.add_argument("-o", "--output", required=True, help="Output TSV file")
-    parser.add_argument("-w", "--window", type=str, required=True, help="Window size as N or MIN-MAX (e.g. 200-400)")
+    parser.add_argument("-w", "--window", type=str, required=True, help="Window size as N or MIN-MAX (e.g. 100-400)")
     parser.add_argument("-s", "--step", type=int, default=5, help="Step size (default=5)")
     parser.add_argument("-t", "--threads", type=int, default=1, help="Number of threads")
     args = parser.parse_args()
@@ -130,7 +175,7 @@ def main():
     records = list(SeqIO.parse(args.input, "fasta"))
     tasks = [(record, min_w, max_w, args.step) for record in records]
 
-    with open(args.output, "w") as f:
+    with open(args.output, "w", buffering=1) as f:
         f.write("seq_id\twindow\tstart\tend\tpercent_K\tpercent_S\n")
 
         # Use imap_unordered so results stream in as they're ready
@@ -140,6 +185,7 @@ def main():
                     f.write(
                         f"{rec_id}\t{window}\t{start}\t{end}\t{pct_k:.4f}\t{pct_s:.4f}\n"
                     )
+
 
 if __name__ == "__main__":
     main()
