@@ -113,16 +113,12 @@ def filter_windows(windows):
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-i", dest="fasta", help="Input FASTA file")
-    parser.add_argument("-w", "--window", type=str, required=True,
-                        help="Window size as N or MIN-MAX (e.g. 200-400)")
-    parser.add_argument("-s", "--step", type=int, default=5,
-                        help="Step size for sliding window (default: 5)")
-    parser.add_argument("-t", "--threads", type=int, default=1,
-                        help="Number of threads (default: 1)")
-    parser.add_argument("-o", "--output", type=str, required=True,
-                        help="Output file (TSV)")
+    parser = argparse.ArgumentParser(description="Sliding window amino acid analysis.")
+    parser.add_argument("-i", "--input", required=True, help="Input FASTA file")
+    parser.add_argument("-o", "--output", required=True, help="Output TSV file")
+    parser.add_argument("-w", "--window", type=str, required=True, help="Window size as N or MIN-MAX (e.g. 200-400)")
+    parser.add_argument("--step", type=int, default=5, help="Step size (default=5)")
+    parser.add_argument("-t", "--threads", type=int, default=1, help="Number of threads")
     args = parser.parse_args()
 
     # Parse window argument
@@ -131,29 +127,19 @@ def main():
     else:
         min_w = max_w = int(args.window)
 
-    records = list(SeqIO.parse(args.fasta, "fasta"))
+    records = list(SeqIO.parse(args.input, "fasta"))
+    tasks = [(record, min_w, max_w, args.step) for record in records]
 
-    # Prepare args for multiprocessing
-    tasks = [(rec, min_w, max_w, args.step) for rec in records]
-
-    if args.threads > 1:
-        with mp.Pool(processes=args.threads) as pool:
-            all_results = pool.map(process_record, tasks)
-    else:
-        all_results = [process_record(task) for task in tasks]
-
-    # flatten results
-    all_results = [w for rec_res in all_results for w in rec_res]
-
-    # filter redundant results
-    filtered_results = filter_windows(all_results)
-
-    # write output
     with open(args.output, "w") as f:
         f.write("seq_id\twindow\tstart\tend\tpercent_K\tpercent_S\n")
-        for rec_id, window, start, end, pct_k, pct_s in filtered_results:
-            f.write(f"{rec_id}\t{window}\t{start}\t{end}\t{pct_k:.1f}\t{pct_s:.1f}\n")
 
+        # Use imap_unordered so results stream in as they're ready
+        with mp.Pool(processes=args.threads) as pool:
+            for result_list in pool.imap_unordered(process_record, tasks, chunksize=1):
+                for rec_id, window, start, end, pct_k, pct_s in result_list:
+                    f.write(
+                        f"{rec_id}\t{window}\t{start}\t{end}\t{pct_k:.4f}\t{pct_s:.4f}\n"
+                    )
 
 if __name__ == "__main__":
     main()
