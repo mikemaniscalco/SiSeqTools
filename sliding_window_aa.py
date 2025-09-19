@@ -56,9 +56,10 @@ def compute_window(seq, start, window):
 def process_record(args):
     """
     Slide windows over a sequence for all window sizes in [min_w, max_w].
-    Return only consolidated windows:
-      - If overlapping windows have identical length, %K, and %S → keep only the first.
-      - If multiple overlapping windows differ → keep the one with highest %K+%S.
+    Consolidate overlapping windows with priority:
+      1) Windows meeting BOTH thresholds > single-threshold windows
+      2) Longer windows
+      3) Allow overlaps <= 25%
     """
     record, min_w, max_w, step = args
     seq = str(record.seq).upper()
@@ -75,7 +76,9 @@ def process_record(args):
             pct_k = subseq.count(AA_1) / length * 100
             pct_s = subseq.count(AA_2) / length * 100
             if pct_k >= THRESH_K or pct_s >= THRESH_S:
-                raw_results.append((window, start, start + window, pct_k, pct_s))
+                # priority: both thresholds met?
+                both_met = pct_k >= THRESH_K and pct_s >= THRESH_S
+                raw_results.append((window, start, start + window, pct_k, pct_s, both_met))
 
     if not raw_results:
         return []
@@ -86,34 +89,37 @@ def process_record(args):
     consolidated = []
     prev = None
 
-    for window, start, end, pct_k, pct_s in raw_results:
+    for window, start, end, pct_k, pct_s, both_met in raw_results:
         if prev is None:
-            prev = (window, start, end, pct_k, pct_s)
+            prev = (window, start, end, pct_k, pct_s, both_met)
             continue
 
-        pw, ps, pe, pk, ps_aa = prev
+        pw, ps, pe, pk, ps_aa, prev_both = prev
 
-        # check if current overlaps with previous
-        if start < pe:
-            # identical percentages & length → keep only the first (prev)
-            if window == pw and abs(pk - pct_k) < 1e-9 and abs(ps_aa - pct_s) < 1e-9:
-                continue
-            else:
-                # choose the "better" window by higher sum %K+%S
-                if (pct_k + pct_s) > (pk + ps_aa):
-                    prev = (window, start, end, pct_k, pct_s)
-                # else keep prev
+        # calculate overlap fraction
+        overlap_len = max(0, min(end, pe) - max(start, ps))
+        overlap_fraction = overlap_len / min(end - start, pe - ps)
+
+        if overlap_fraction > 0.25:  # collapse if >25% overlap
+            # prioritize windows meeting both thresholds
+            if both_met and not prev_both:
+                prev = (window, start, end, pct_k, pct_s, both_met)
+            elif both_met == prev_both:
+                # tie-breaker: longest window wins
+                if window > pw:
+                    prev = (window, start, end, pct_k, pct_s, both_met)
+            # else keep prev
         else:
-            # no overlap, flush prev
+            # small overlap ≤25% → allow both, flush prev
             consolidated.append(prev)
-            prev = (window, start, end, pct_k, pct_s)
+            prev = (window, start, end, pct_k, pct_s, both_met)
 
-    # don’t forget to append the last one
+    # append last one
     if prev is not None:
         consolidated.append(prev)
 
-    # attach record id to results
-    return [(rec_id, w, s, e, pk, ps) for (w, s, e, pk, ps) in consolidated]
+    # attach record id to results (ignore both_met flag)
+    return [(rec_id, w, s, e, pk, ps) for (w, s, e, pk, ps, _) in consolidated]
 
 
 
