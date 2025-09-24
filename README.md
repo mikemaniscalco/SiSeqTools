@@ -65,6 +65,14 @@ pip install biopython
 
 ---
 
+## ⚙️ Requirements
+
+Python 3.8+
+(Script is compatible with Python 3.6+, but Biopython and other modern packages now require Python ≥3.8.)
+
+Biopython (tested with version ≥1.83)
+---
+
 ## 🛠 Planned Additions
 
 * Additional amino acid scanning utilities
