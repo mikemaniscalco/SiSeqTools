@@ -85,3 +85,51 @@ Biopython (tested with version ≥1.83)
 ## 📄 License
 
 This project is licensed under the [MIT License](LICENSE).
+
+
+####
+Notes:
+Scheffel et al. 2011
+To identify proteins carrying a domain ≥100 amino acid residues with ≥18%
+serine and ≥10% lysine, the amino acid compositions were calculated
+within a sliding window of variable size (window size increased in steps of
+one amino acid from 100 to 2,000 amino acids).
+
+Durkin et al. 2016 (SIT evolution paper)
+The predicted protein domains were determined from all
+available full-length SIT sequences using InterproScan (Jones
+et al. 2014). Transmembrane (TM)-spanning domains were
+predicted by TMHMM (Krogh et al. 2001) (posterior proba-
+bility ≥0.1) and coiled-coil motifs were identiﬁed by MAR-
+COILS (Delorenzi and Speed 2002) (prediction threshold
+≥10%). The serine percentage of the predicted protein
+sequences was calculated in a sliding window of 20 amino
+acids and proteins were deﬁned as serine-enriched if serine
+content within a window was greater than 30%.
+
+Skeffington et al. 2022 (motif identification)
+Docker image: biologistatsea/promofi:05
+```
+docker run --rm \
+  --platform linux/amd64 \
+  -v /Users/mamanisc/Documents/gitlab_repos/SiSeqTools/Docker/:/working/ \
+  -w /working \
+  biologistatsea/promofi:05 \
+  /working/Lotgi_targets.fasta /working/Lotgi1_GeneModels_FilteredModels1_aa.fasta 9 1e-6 1e-20 0.65 OUT
+```
+Breakdown of Arguments:
+Argument	Value	Role
+-v	/Users/.../Docker/:/working/	Mounts your local folder into the container
+-w	/working/	Sets working directory inside container
+FG	Lotgi_targets.fasta	Foreground (target) sequences
+BG	Lotgi1_GeneModels_FilteredModels1_aa.fasta	Background sequences
+9	9	Motif length
+1e-6	1e-6	p-value threshold
+1e-20	1e-20	E-value threshold
+0.65	0.65	Score threshold
+OUT	OUT	Output prefix/directory
+
+Docker image:
+biologistatsea/seprolyzer:03
+
+####

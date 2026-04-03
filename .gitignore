@@ -1,2 +1,4 @@
 *.DS_Store
 *.tsv
+/Docker/Mgal
+Docker/OUT_*
